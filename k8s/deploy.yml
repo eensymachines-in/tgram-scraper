@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deply-tgramscrape
+  labels:
+    app: scraper
+    type: httpweb
+    platform: telegram
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scraper
+  template:
+    metadata:
+      name: pod-tgramscrape
+      labels:
+        app: scraper
+        type: httpweb
+        platform: telegram
+    spec:
+      containers:
+        - name: ctn-tgramscrape
+          image: kneerunjun/tgramscraper:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 8080
