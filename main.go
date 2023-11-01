@@ -1,7 +1,10 @@
 package main
 
 /* ========================
-u-service based on Go gin to provide an http endpoint that can be triggered when applications need to scrape
+u-service based on Go gin to provide an http endpoint that can be triggered when applications need to scrape Telegram bot messages. 
+The endpoint is agnostic to any bot. When identified with bot ID, or the chat ID for the bot this can then check the bot for messages.
+author 		:kneerunjun@gmail.com
+date		:01-NOV-2023
 ===========================*/
 import (
 	"encoding/json"
@@ -22,7 +25,8 @@ var (
 	FVerbose, FLogF, FSeed bool
 	logFile                string
 )
-
+// details of the bot are from secret configurations 
+// token for the bot cannot be exposed 
 const (
 	// Details on botrunjun
 	BASEURL   = "https://api.telegram.org/bot"
@@ -46,6 +50,8 @@ func init() {
 
 func getBotTokFromID(chatid string) string {
 	// Ideally speaking this shall come from secrets and configuration
+	// for each of the bot id - or the botchat id the token is to be retrieved from secrets file
+	// NOTE: for now we just send the hard coded value back
 	return BOTTOK
 }
 
