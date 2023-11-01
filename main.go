@@ -66,8 +66,8 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 	// IDs - botid, updateid are better off in strin format until any mathematical opertation
 	// all numerical ids are checked for input and sends back a bad request code whebn its not
 	// ---------
-	rgx := regexp.MustCompile(`^[0-9]+$`)
-	if !rgx.MatchString(ctx.Param("botid")) {
+	rgx := regexp.MustCompile(`^[0-9]+$`) // url params checked
+	if !rgx.MatchString(ctx.Param("botid")) { // always numerical id
 		errMsg := fmt.Errorf("invalid bot chat id in url, check & send again")
 		log.WithFields(log.Fields{
 			"err-msg": errMsg,
@@ -77,8 +77,10 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			"err": errMsg,
 		})
 		return
-	}
-	if !rgx.MatchString(ctx.Param("updtid")) {
+	} // botid is the same as the private chatid with the bot
+	// useful when commands given to the bot can be filtered by the chatid
+	// so as to have only the bot owner issuing commands.
+	if !rgx.MatchString(ctx.Param("updtid")) { // validating updtid 
 		errMsg := fmt.Errorf("invalid bot update offset in url, check & send again")
 		log.WithFields(log.Fields{
 			"err-msg":   errMsg,
@@ -88,7 +90,7 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			"err": errMsg,
 		})
 		return
-	}
+	} // used to offset updates in subsequent calls.
 	// -------- Making http request to Telegram server
 	// 	- uses the base url common for all the requests
 	// 	- bot token to identify the bot uniquely
@@ -130,11 +132,7 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			})
 			return
 		}
-		// The caller of this endpoint should know whats the next updateID to call
-		allUpdates := []string{}
-		for _, r := range updt.Result {
-			allUpdates = append(allUpdates, r.Message.Text)
-		}
+		// The caller of this endpoint should know whats the next updateID to call		
 		ctx.AbortWithStatusJSON(http.StatusOK, gin.H{
 			"updateOffset": func() *big.Int {
 				n := new(big.Int)
@@ -145,8 +143,15 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 				}
 				return n
 			}(), // last result read add one to the update ID
+			// that value forms the offset id for the next trigger
 			"totalUpdates": len(updt.Result),
-			"allMessages":  allUpdates,
+			"allMessages":  func()[]string{ // collects texts of all the messages
+				res := [] string{}
+				for _, r := range updt.Result {
+					res = append(res, r.Message.Text)
+				}
+				return res
+			}(),
 		})
 		return
 	} else { // failed response code from Telegram server
