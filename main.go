@@ -1,12 +1,13 @@
 package main
 
 /* ========================
-u-service based on Go gin to provide an http endpoint that can be triggered when applications need to scrape Telegram bot messages. 
+u-service based on Go gin to provide an http endpoint that can be triggered when applications need to scrape Telegram bot messages.
 The endpoint is agnostic to any bot. When identified with bot ID, or the chat ID for the bot this can then check the bot for messages.
 author 		:kneerunjun@gmail.com
 date		:01-NOV-2023
 ===========================*/
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"time"
 
 	"github.com/eensymachines/tgramscraper/models"
 	"github.com/gin-gonic/gin"
@@ -25,13 +27,14 @@ var (
 	FVerbose, FLogF, FSeed bool
 	logFile                string
 )
-// details of the bot are from secret configurations 
-// token for the bot cannot be exposed 
+
+// details of the bot are from secret configurations
+// token for the bot cannot be exposed
 const (
-	// Details on botrunjun
+	// Details on botmincock.. since that bot isnt functional for now
 	BASEURL   = "https://api.telegram.org/bot"
-	BOTTOK    = "5234189659:AAFhRYn_Rmg4EvAtC6nkraPZjgttiBLWFdg"
-	BOTCHATID = 5157350442
+	BOTTOK    = "6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk"
+	BOTCHATID = "6133190482"
 )
 
 func init() {
@@ -66,7 +69,7 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 	// IDs - botid, updateid are better off in strin format until any mathematical opertation
 	// all numerical ids are checked for input and sends back a bad request code whebn its not
 	// ---------
-	rgx := regexp.MustCompile(`^[0-9]+$`) // url params checked
+	rgx := regexp.MustCompile(`^[0-9]+$`)     // url params checked
 	if !rgx.MatchString(ctx.Param("botid")) { // always numerical id
 		errMsg := fmt.Errorf("invalid bot chat id in url, check & send again")
 		log.WithFields(log.Fields{
@@ -80,7 +83,7 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 	} // botid is the same as the private chatid with the bot
 	// useful when commands given to the bot can be filtered by the chatid
 	// so as to have only the bot owner issuing commands.
-	if !rgx.MatchString(ctx.Param("updtid")) { // validating updtid 
+	if !rgx.MatchString(ctx.Param("updtid")) { // validating updtid
 		errMsg := fmt.Errorf("invalid bot update offset in url, check & send again")
 		log.WithFields(log.Fields{
 			"err-msg":   errMsg,
@@ -96,9 +99,13 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 	// 	- bot token to identify the bot uniquely
 	//  - offset id from the url
 	// --------
-	resp, err := http.Get(getUpdatesURL(BASEURL, getBotTokFromID(ctx.Param("botid")), ctx.Param("updtid")))
+	req, _ := http.NewRequest("GET", getUpdatesURL(BASEURL, getBotTokFromID(ctx.Param("botid")), ctx.Param("updtid")), bytes.NewBuffer([]byte("")))
+	client := &http.Client{
+		Timeout: 6 * time.Second,
+	}
+	resp, err := client.Do(req)
 	if err != nil { // typically when no internet connection
-		errMsg := fmt.Errorf("failed to make request to telegram server")
+		errMsg := fmt.Errorf("failed to create new request")
 		log.WithFields(log.Fields{
 			"err-msg": errMsg,
 		}).Error(errMsg)
@@ -132,7 +139,7 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			})
 			return
 		}
-		// The caller of this endpoint should know whats the next updateID to call		
+		// The caller of this endpoint should know whats the next updateID to call
 		ctx.AbortWithStatusJSON(http.StatusOK, gin.H{
 			"updateOffset": func() *big.Int {
 				n := new(big.Int)
@@ -145,8 +152,8 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			}(), // last result read add one to the update ID
 			// that value forms the offset id for the next trigger
 			"totalUpdates": len(updt.Result),
-			"allMessages":  func()[]string{ // collects texts of all the messages
-				res := [] string{}
+			"allMessages": func() []string { // collects texts of all the messages
+				res := []string{}
 				for _, r := range updt.Result {
 					res = append(res, r.Message.Text)
 				}
