@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/eensymachines/tgramscraper/models"
 	"github.com/stretchr/testify/assert"
@@ -55,5 +56,37 @@ func TestBasicHTTPEndpoint(t *testing.T) {
 		resp, err := http.Post(url, "application/json", nil)
 		assert.Nil(t, err, "Unexpected err when post request")
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Unepxected status code when botchat id is invalid")
+	}
+}
+
+func TestCronTriggerOnHTTPEndpoint(t *testing.T) {
+	// This runs a continuous loop on sending POST requests to this endpoint to see if we can get all the updates as expected
+	// Run this test and then head over to Telegram chat and send messages
+	// All those messages would be available here
+	offset := big.NewInt(0)
+	for {
+		t.Log("Now triggering a scrape")
+
+		url := fmt.Sprintf("http://localhost:8080/bots/%s/scrape/%d", BOTCHATID, offset)
+		resp, err := http.Post(url, "application/json", nil)
+		
+		if resp != nil && err == nil {
+			assert.Equal(t, 200, resp.StatusCode, "Unexpected error code when url is valid")
+			// Recalculating the offset from the payload received
+			res := map[string]interface{}{}
+			byt, err := io.ReadAll(resp.Body)
+			assert.Nil(t, err, fmt.Sprintf("Unexpected error when reading the body %s", err))
+			err = json.Unmarshal(byt, &res)
+			assert.Nil(t, err, fmt.Sprintf("Unexpected error when unmarshalling the body %s", err))
+			t.Logf("Updates received %v", res["totalUpdates"])
+			messages, _ := res["allMessages"].([]interface{})
+			for _, v := range messages {
+				t.Log(v)
+			}
+			val, _ := res["updateOffset"].(string)
+			offset, _ = offset.SetString(val, 10)
+		}
+
+		<-time.After(5 * time.Second)
 	}
 }

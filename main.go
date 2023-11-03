@@ -147,15 +147,19 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			return
 		}
 		// The caller of this endpoint should know whats the next updateID to call
+		// Incase there arent any updates - this shall send the same number as is back to the caller
+		// This is equivalent to haveing offset=0 which will then fetch new updates as and when they come in
 		ctx.AbortWithStatusJSON(http.StatusOK, gin.H{
-			"updateOffset": func() *big.Int {
+			"updateOffset": func() string {
 				n := new(big.Int)
 				if len(updt.Result) > 0 {
 					val, _ := n.SetString(updt.Result[len(updt.Result)-1].UpdtID.String(), 10)
 					val = n.Add(val, big.NewInt(1))
-					return val
+					return val.String()
 				}
-				return n
+				// When there arent any updates - the offset isnt shifted and the same offset is sent back to the caller
+				val, _ := n.SetString(ctx.Param("updtid"), 10)
+				return val.String()
 			}(), // last result read add one to the update ID
 			// that value forms the offset id for the next trigger
 			"totalUpdates": len(updt.Result),
