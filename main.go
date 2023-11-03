@@ -9,6 +9,7 @@ date		:01-NOV-2023
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -109,6 +110,12 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 		log.WithFields(log.Fields{
 			"err-msg": errMsg,
 		}).Error(errMsg)
+		// NOTE: Is ErrHandlerTimeout same as timeout error?
+		if errors.Is(err, http.ErrHandlerTimeout) {
+			ctx.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
+				"err": errMsg,
+			})
+		}
 		ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
 			"err": errMsg,
 		})
