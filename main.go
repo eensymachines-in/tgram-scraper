@@ -3,6 +3,10 @@ package main
 /* ========================
 u-service based on Go gin to provide an http endpoint that can be triggered when applications need to scrape Telegram bot messages.
 The endpoint is agnostic to any bot. When identified with bot ID, or the chat ID for the bot this can then check the bot for messages.
+This service is entirely stateless -
+- Agnostic of the bot id and token. when received as a param this can send the getUpdates request to any bot
+- Does not store the last queried update id / offset - thats the responsibility of the caller
+-
 author 		:kneerunjun@gmail.com
 date		:01-NOV-2023
 ===========================*/
@@ -33,9 +37,12 @@ var (
 // token for the bot cannot be exposed
 const (
 	// Details on botmincock.. since that bot isnt functional for now
-	BASEURL   = "https://api.telegram.org/bot"
+	BASEURL = "https://api.telegram.org/bot"
+	// following 2 should be received from secrets
 	BOTTOK    = "6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk"
 	BOTCHATID = "6133190482"
+
+	REQTIMEOUT = 6 * time.Second
 )
 
 func init() {
@@ -44,6 +51,7 @@ func init() {
 		DisableColors: false,
 		FullTimestamp: false,
 		ForceColors:   true,
+		PadLevelText:  true,
 	})
 	log.SetReportCaller(false)
 	// By default the log output is stdout and the level is info
@@ -102,7 +110,7 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 	// --------
 	req, _ := http.NewRequest("GET", getUpdatesURL(BASEURL, getBotTokFromID(ctx.Param("botid")), ctx.Param("updtid")), bytes.NewBuffer([]byte("")))
 	client := &http.Client{
-		Timeout: 6 * time.Second,
+		Timeout: REQTIMEOUT,
 	}
 	resp, err := client.Do(req)
 	if err != nil { // typically when no internet connection
