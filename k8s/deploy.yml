@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: ctn-tgramscrape
-          image: kneerunjun/tgramscraper:1.0
+          image: kneerunjun/tgramscraper:1.1
           imagePullPolicy: IfNotPresent
           ports:
           - containerPort: 8080

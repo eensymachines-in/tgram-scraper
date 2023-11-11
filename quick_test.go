@@ -31,15 +31,15 @@ func TestBotGetUpdates(t *testing.T) {
 }
 
 func TestBasicHTTPEndpoint(t *testing.T) {
-	url := fmt.Sprintf("http://localhost:8080/bots/%s/scrape/0", BOTCHATID)
+	url := fmt.Sprintf("http://localhost:30001/bots/%s/scrape/0", BOTCHATID)
 	resp, _ := http.Post(url, "application/json", nil)
 	assert.Equal(t, 200, resp.StatusCode, "Unexpected code when url is valid")
 	notOkURLs := []string{
-		fmt.Sprintf("http://localhost:8080/bots/%s/scrape/0", "InvalidChatID"),
-		fmt.Sprintf("http://localhost:8080/bots/%s/scrape/0", " "),
-		// fmt.Sprintf("http://localhost:8080/bots/%s/scrape/0", "%$^&$^%$"),
+		fmt.Sprintf("http://localhost:30001/bots/%s/scrape/0", "InvalidChatID"),
+		fmt.Sprintf("http://localhost:30001/bots/%s/scrape/0", " "),
+		// fmt.Sprintf("http://localhost:30001/bots/%s/scrape/0", "%$^&$^%$"),
 		// special characters in the url would mean the request does not go thru at all
-		fmt.Sprintf("http://localhost:8080/bots/%s/scrape/0", ""),
+		fmt.Sprintf("http://localhost:30001/bots/%s/scrape/0", ""),
 	}
 	for _, url := range notOkURLs {
 		resp, err := http.Post(url, "application/json", nil)
@@ -48,9 +48,9 @@ func TestBasicHTTPEndpoint(t *testing.T) {
 	}
 	// then testing for invalid offsets
 	notOkURLs = []string{
-		fmt.Sprintf("http://localhost:8080/bots/5157350442/scrape/%s", "yuy5345"),
-		fmt.Sprintf("http://localhost:8080/bots/5157350442/scrape/%s", "rtytry"),
-		fmt.Sprintf("http://localhost:8080/bots/5157350442/scrape/%s", " "),
+		fmt.Sprintf("http://localhost:30001/bots/5157350442/scrape/%s", "yuy5345"),
+		fmt.Sprintf("http://localhost:30001/bots/5157350442/scrape/%s", "rtytry"),
+		fmt.Sprintf("http://localhost:30001/bots/5157350442/scrape/%s", " "),
 	}
 	for _, url := range notOkURLs {
 		resp, err := http.Post(url, "application/json", nil)
@@ -67,7 +67,7 @@ func TestCronTriggerOnHTTPEndpoint(t *testing.T) {
 	for {
 		t.Log("Now triggering a scrape")
 
-		url := fmt.Sprintf("http://localhost:8080/bots/%s/scrape/%d", BOTCHATID, offset)
+		url := fmt.Sprintf("http://localhost:30001/bots/%s/scrape/%d", BOTCHATID, offset)
 		resp, err := http.Post(url, "application/json", nil)
 		
 		if resp != nil && err == nil {

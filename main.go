@@ -23,14 +23,17 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/eensymachines/tgramscraper/brokers"
 	"github.com/eensymachines/tgramscraper/models"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/streadway/amqp"
 )
 
 var (
 	FVerbose, FLogF, FSeed bool
 	logFile                string
+	RabbitConn             *amqp.Connection // app wide connection used to broadcast the messages received from telegram server
 )
 
 // details of the bot are from secret configurations
@@ -42,7 +45,13 @@ const (
 	BOTTOK    = "6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk"
 	BOTCHATID = "6133190482"
 
-	REQTIMEOUT = 6 * time.Second
+	REQTIMEOUT   = 6 * time.Second
+	RABBIT_QUEUE = "tgramscrape_messages"
+	// constants below are incase when the environment variables arent loaded
+	// IMP: do not use them production
+	AMQP_USER   = "guest"
+	AMQP_PASSWD = "guest"
+	AMQP_SERVER = "localhost:30073" // server address inclusive of te port
 )
 
 func init() {
@@ -58,6 +67,45 @@ func init() {
 	log.SetOutput(os.Stdout)     // FLogF will set it main, but dfault is stdout
 	log.SetLevel(log.DebugLevel) // default level info debug but FVerbose will set it main
 	logFile = os.Getenv("LOGF")
+
+	// ------------- Reading in the environment
+	// ------- forming the connection string
+	user := os.Getenv("AMQP_USER")
+	if user == "" {
+		user = AMQP_USER
+	}
+	passwd := os.Getenv("AMQP_PASSWD")
+	if passwd == "" {
+		passwd = AMQP_PASSWD
+	}
+	server := os.Getenv("AMQP_SERVER")
+	if server == "" {
+		server = AMQP_SERVER
+	}
+
+	// Making rabbit mq connection
+	// declaring a queue that all the subscribers listen to
+	//svc-rabbit:5672
+	//localhost:30072
+	conn, err := amqp.Dial(fmt.Sprintf("amqp://%s:%s@%s/", user, passwd, server))
+	if err != nil || conn == nil {
+		log.WithFields(log.Fields{
+			"err": err,
+		}).Error("failed to make amqp connection to rabbit mq")
+		panic(err)
+	}
+	log.Info("Established connection to rabbitmq broker")
+
+	RabbitConn = conn
+	rabbit := brokers.QueuedBroker(&brokers.RabbitMQBroker{Conn: RabbitConn})
+	err = rabbit.DeclareQueue(RABBIT_QUEUE)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"err": err,
+		}).Error("failed declare queue, tgramscrape_messages")
+		panic(err)
+	}
+	// ------------ Queue declared, connection established
 }
 
 func getBotTokFromID(chatid string) string {
@@ -144,6 +192,18 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			})
 			return
 		}
+		rabbit := brokers.Broker(&brokers.RabbitMQBroker{Conn: RabbitConn, QName: RABBIT_QUEUE}) // making a new rabbit mq broker
+		err = rabbit.Publish(byt)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"err-msg": err,
+			}).Error("failed to publish downloaded message to the broker")
+			ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
+				"err": "Received message from Telegram server, but could not broker",
+			})
+			return
+		}
+
 		err = json.Unmarshal(byt, &updt)
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -194,7 +254,8 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 	}
 }
 func main() {
-	flag.Parse() // command line flags are parsed
+	defer RabbitConn.Close() // cleaning up the connection when not required
+	flag.Parse()             // command line flags are parsed
 	log.WithFields(log.Fields{
 		"verbose": FVerbose,
 		"flog":    FLogF,
