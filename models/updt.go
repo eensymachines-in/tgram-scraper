@@ -2,6 +2,10 @@ package models
 
 import "encoding/json"
 
+type ResponseForWrite interface {
+	Read() interface{}
+}
+
 type Sender struct {
 	SenderID  json.Number `json:"id"`
 	FirstName string      `json:"first_name"`
@@ -27,4 +31,5 @@ type Update struct {
 type UpdateResponse struct {
 	OK     bool     `json:"ok"`
 	Result []Update `json:"result"`
+	BotID  string   `json:"botid,omitempty"` // this is required when bot agnostic services listen , not included as a part of getUpdates
 }

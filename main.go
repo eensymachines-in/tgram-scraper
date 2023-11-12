@@ -11,13 +11,8 @@ author 		:kneerunjun@gmail.com
 date		:01-NOV-2023
 ===========================*/
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"math/big"
 	"net/http"
 	"os"
 	"regexp"
@@ -34,6 +29,7 @@ var (
 	FVerbose, FLogF, FSeed bool
 	logFile                string
 	RabbitConn             *amqp.Connection // app wide connection used to broadcast the messages received from telegram server
+	BotsRegistry           map[string]string
 )
 
 // details of the bot are from secret configurations
@@ -44,6 +40,7 @@ const (
 	// following 2 should be received from secrets
 	BOTTOK    = "6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk"
 	BOTCHATID = "6133190482"
+	NIRCHATID = "5157350442" // this id is the chat id of the developer
 
 	REQTIMEOUT   = 6 * time.Second
 	RABBIT_QUEUE = "tgramscrape_messages"
@@ -97,35 +94,14 @@ func init() {
 	log.Info("Established connection to rabbitmq broker")
 
 	RabbitConn = conn
-	rabbit := brokers.QueuedBroker(&brokers.RabbitMQBroker{Conn: RabbitConn})
-	err = rabbit.DeclareQueue(RABBIT_QUEUE)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"err": err,
-		}).Error("failed declare queue, tgramscrape_messages")
-		panic(err)
-	}
-	// ------------ Queue declared, connection established
+	// this registry can be hydrated from environment / secret files
+	// for all the development purposes we have left it hardcoded for now
+	BotsRegistry = map[string]string{
+		"6133190482": "6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk",
+	} // all the valid bots are registered here for id and the token for the same
 }
 
-func getBotTokFromID(chatid string) string {
-	// Ideally speaking this shall come from secrets and configuration
-	// for each of the bot id - or the botchat id the token is to be retrieved from secrets file
-	// NOTE: for now we just send the hard coded value back
-	return BOTTOK
-}
-
-// getUpdatesURL : Telegram server needs appropriate url that can be queried for offset
-func getUpdatesURL(baseurl string, bottok string, offset string) string {
-	return fmt.Sprintf("%s%s/getUpdates?offset=%s", baseurl, bottok, offset)
-}
-
-// HndlScrapeTrigger : function to handle the endpoint hit
 func HndlScrapeTrigger(ctx *gin.Context) {
-	// -------- reading the url params
-	// IDs - botid, updateid are better off in strin format until any mathematical opertation
-	// all numerical ids are checked for input and sends back a bad request code whebn its not
-	// ---------
 	rgx := regexp.MustCompile(`^[0-9]+$`)     // url params checked
 	if !rgx.MatchString(ctx.Param("botid")) { // always numerical id
 		errMsg := fmt.Errorf("invalid bot chat id in url, check & send again")
@@ -137,9 +113,7 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			"err": errMsg,
 		})
 		return
-	} // botid is the same as the private chatid with the bot
-	// useful when commands given to the bot can be filtered by the chatid
-	// so as to have only the bot owner issuing commands.
+	}
 	if !rgx.MatchString(ctx.Param("updtid")) { // validating updtid
 		errMsg := fmt.Errorf("invalid bot update offset in url, check & send again")
 		log.WithFields(log.Fields{
@@ -150,109 +124,38 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			"err": errMsg,
 		})
 		return
-	} // used to offset updates in subsequent calls.
-	// -------- Making http request to Telegram server
-	// 	- uses the base url common for all the requests
-	// 	- bot token to identify the bot uniquely
-	//  - offset id from the url
-	// --------
-	req, _ := http.NewRequest("GET", getUpdatesURL(BASEURL, getBotTokFromID(ctx.Param("botid")), ctx.Param("updtid")), bytes.NewBuffer([]byte("")))
-	client := &http.Client{
-		Timeout: REQTIMEOUT,
 	}
-	resp, err := client.Do(req)
-	if err != nil { // typically when no internet connection
-		errMsg := fmt.Errorf("failed to create new request")
+	// Preparing the broker to be consumed by the scraper
+	// making a new rabbit mq broker
+	rabbit := brokers.Broker(&brokers.RabbitMQBroker{Conn: RabbitConn, QName: RABBIT_QUEUE})
+	err := rabbit.(brokers.QueuedBroker).DeclareQueue(RABBIT_QUEUE)
+	if err != nil {
 		log.WithFields(log.Fields{
-			"err-msg": errMsg,
-		}).Error(errMsg)
-		// NOTE: Is ErrHandlerTimeout same as timeout error?
-		if errors.Is(err, http.ErrHandlerTimeout) {
-			ctx.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
-				"err": errMsg,
-			})
-		}
+			"err-msg": err,
+		}).Error("failed to initiate a queue on the broker")
 		ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-			"err": errMsg,
+			"err": "Received message from Telegram server, but could not broker",
 		})
 		return
 	}
-	if resp.StatusCode == 200 {
-		//  read the update and send it across as a response
-		// moving ahead we would post it to a cache for other services to pick up
-		// also update the last update id for the offset for the next trigger
-		updt := models.UpdateResponse{}
-		byt, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"err-msg": err,
-			}).Error("failed to read response body from telegram server")
-			ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-				"err": "Error reading the response from server",
-			})
-			return
-		}
-		rabbit := brokers.Broker(&brokers.RabbitMQBroker{Conn: RabbitConn, QName: RABBIT_QUEUE}) // making a new rabbit mq broker
-		err = rabbit.Publish(byt)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"err-msg": err,
-			}).Error("failed to publish downloaded message to the broker")
-			ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-				"err": "Received message from Telegram server, but could not broker",
-			})
-			return
-		}
-
-		err = json.Unmarshal(byt, &updt)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"err-msg": err,
-			}).Error("failed to unmarshal response body from telegram server")
-			ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-				"err": "Error reading the response from server",
-			})
-			return
-		}
-		// The caller of this endpoint should know whats the next updateID to call
-		// Incase there arent any updates - this shall send the same number as is back to the caller
-		// This is equivalent to haveing offset=0 which will then fetch new updates as and when they come in
-		ctx.AbortWithStatusJSON(http.StatusOK, gin.H{
-			"updateOffset": func() string {
-				n := new(big.Int)
-				if len(updt.Result) > 0 {
-					val, _ := n.SetString(updt.Result[len(updt.Result)-1].UpdtID.String(), 10)
-					val = n.Add(val, big.NewInt(1))
-					return val.String()
-				}
-				// When there arent any updates - the offset isnt shifted and the same offset is sent back to the caller
-				val, _ := n.SetString(ctx.Param("updtid"), 10)
-				return val.String()
-			}(), // last result read add one to the update ID
-			// that value forms the offset id for the next trigger
-			"totalUpdates": len(updt.Result),
-			"allMessages": func() []string { // collects texts of all the messages
-				res := []string{}
-				for _, r := range updt.Result {
-					res = append(res, r.Message.Text)
-				}
-				return res
-			}(),
-		})
-		return
-	} else { // failed response code from Telegram server
-		errMsg := "error response from telegram server"
+	// Response writer
+	scraper := models.Scraper(&models.TelegramScraper{UID: ctx.Param("botid"), Offset: ctx.Param("updtid"), Registry: BotsRegistry, Broker: rabbit})
+	resp, err := scraper.Scrape(REQTIMEOUT)
+	if err != nil {
 		log.WithFields(log.Fields{
-			"url":     ctx.Request.URL.String(),
-			"code":    resp.StatusCode,
-			"err-msg": errMsg,
-		}).Error(errMsg)
-		ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-			"err": errMsg,
+			"botid":          ctx.Param("botid"),
+			"offset":         ctx.Param("updtid"),
+			"count_reg_bots": len(BotsRegistry),
+			"broker_nil":     fmt.Sprintf("%t", len(BotsRegistry) > 0),
+		}).Errorf("failed to scrape/TelegramScraper: %s", err)
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"err": "Error scraping updates from Telegram server",
 		})
 		return
 	}
+	ctx.AbortWithStatusJSON(http.StatusOK, resp)
 }
+
 func main() {
 	defer RabbitConn.Close() // cleaning up the connection when not required
 	flag.Parse()             // command line flags are parsed
