@@ -6,12 +6,34 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/eensymachines/tgramscraper/models"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestHandler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	// req, err := http.NewRequestWithContext(ctx, "POST", "/bots/6133190482/scrape/0", nil)
+	ctx.Request = &http.Request{
+		Header: make(http.Header),
+		URL:    &url.URL{Path: "/bots/:botid/scrape/:updtid"},
+	}
+	ctx.Request.Method = "POST"
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Params = []gin.Param{
+		{Key: "botid", Value: "6133190482"},
+		{Key: "updtid", Value: "0"},
+	}
+	HndlScrapeTrigger(ctx)
+	// assert.Equal(t, http.StatusOK, w.Result().StatusCode, "Unexpected http status code in response")
+}
 
 func TestBotGetUpdates(t *testing.T) {
 	url := fmt.Sprintf("%s%s/getUpdates", BASEURL, BOTTOK)
@@ -69,7 +91,7 @@ func TestCronTriggerOnHTTPEndpoint(t *testing.T) {
 
 		url := fmt.Sprintf("http://localhost:30001/bots/%s/scrape/%d", BOTCHATID, offset)
 		resp, err := http.Post(url, "application/json", nil)
-		
+
 		if resp != nil && err == nil {
 			assert.Equal(t, 200, resp.StatusCode, "Unexpected error code when url is valid")
 			// Recalculating the offset from the payload received

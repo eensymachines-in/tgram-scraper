@@ -29,7 +29,7 @@ type Update struct {
 }
 
 type UpdateResponse struct {
-	OK     bool     `json:"ok"`
-	Result []Update `json:"result"`
-	BotID  string   `json:"botid,omitempty"` // this is required when bot agnostic services listen , not included as a part of getUpdates
+	OK     bool     `json:"ok"`              // part of getUpdates
+	Result []Update `json:"result"`          // part of getUpdates
+	BotID  string   `json:"botid,omitempty"` // not a part of getUpdates, but requyired by downstream services to identify the bot
 }

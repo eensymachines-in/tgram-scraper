@@ -29,7 +29,7 @@ var (
 	FVerbose, FLogF, FSeed bool
 	logFile                string
 	RabbitConn             *amqp.Connection // app wide connection used to broadcast the messages received from telegram server
-	BotsRegistry           map[string]string
+	BotsRegistry           models.TokenRegistry
 )
 
 // details of the bot are from secret configurations
@@ -94,11 +94,13 @@ func init() {
 	log.Info("Established connection to rabbitmq broker")
 
 	RabbitConn = conn
+	// TODO:
 	// this registry can be hydrated from environment / secret files
 	// for all the development purposes we have left it hardcoded for now
-	BotsRegistry = map[string]string{
-		"6133190482": "6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk",
-	} // all the valid bots are registered here for id and the token for the same
+	BotsRegistry = models.NewSimpleTokenRegistry("6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk")
+	log.WithFields(log.Fields{
+		"count": BotsRegistry.Count(),
+	}).Debug("botsregistry read in")
 }
 
 func HndlScrapeTrigger(ctx *gin.Context) {
@@ -145,11 +147,11 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 		log.WithFields(log.Fields{
 			"botid":          ctx.Param("botid"),
 			"offset":         ctx.Param("updtid"),
-			"count_reg_bots": len(BotsRegistry),
-			"broker_nil":     fmt.Sprintf("%t", len(BotsRegistry) > 0),
+			"count_reg_bots": BotsRegistry.Count(),
+			"broker_nil":     fmt.Sprintf("%t", BotsRegistry.Count() > 0),
 		}).Errorf("failed to scrape/TelegramScraper: %s", err)
-		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"err": "Error scraping updates from Telegram server",
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"err": fmt.Sprintf("bot ID unregistered or is invalid: %s", ctx.Param("botid")),
 		})
 		return
 	}
@@ -190,5 +192,6 @@ func main() {
 		})
 	})
 	r.POST("/bots/:botid/scrape/:updtid", HndlScrapeTrigger)
+
 	log.Fatal(r.Run(":8080"))
 }

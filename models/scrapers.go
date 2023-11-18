@@ -18,19 +18,19 @@ import (
 type TelegramScraper struct {
 	UID      string
 	Offset   string
-	Registry map[string]string // registry of all the valid bots
+	Registry TokenRegistry
 	Broker   brokers.Broker
 	// Writer   ResponseWriter
 }
 
 // Scrape : getupdates > send the message over to the broker >return reponse result (sumamry of the update)
 func (ts *TelegramScraper) Scrape(reqTimeOut time.Duration) (map[string]interface{}, error) {
-	var botTok string
-	for k, v := range ts.Registry {
-		if k == ts.UID {
-			botTok = v
-			break
-		}
+	// TODO: finding from the registry shouldnt be the responsibility of the scrapper
+	// Need tomove the same from here
+	botTok, ok := ts.Registry.Find(ts.UID)
+	if !ok {
+		// unregistered bot token
+		return nil, fmt.Errorf("invalid bot ID, no token found registered against it %s", ts.UID)
 	}
 	if botTok != "" {
 		url := func(tok string) string {
