@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/eensymachines/tgramscraper/brokers"
-	"github.com/eensymachines/tgramscraper/models"
+	"github.com/eensymachines/tgramscraper/scrapers"
+	"github.com/eensymachines/tgramscraper/tokens"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
@@ -29,7 +30,7 @@ var (
 	FVerbose, FLogF, FSeed bool
 	logFile                string
 	RabbitConn             *amqp.Connection // app wide connection used to broadcast the messages received from telegram server
-	BotsRegistry           models.TokenRegistry
+	BotsRegistry           tokens.TokenRegistry
 )
 
 // details of the bot are from secret configurations
@@ -97,7 +98,7 @@ func init() {
 	// TODO:
 	// this registry can be hydrated from environment / secret files
 	// for all the development purposes we have left it hardcoded for now
-	BotsRegistry = models.NewSimpleTokenRegistry("6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk")
+	BotsRegistry = tokens.NewSimpleTokenRegistry("6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk")
 	log.WithFields(log.Fields{
 		"count": BotsRegistry.Count(),
 	}).Debug("botsregistry read in")
@@ -141,7 +142,7 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 		return
 	}
 	// Response writer
-	scraper := models.Scraper(&models.TelegramScraper{UID: ctx.Param("botid"), Offset: ctx.Param("updtid"), Registry: BotsRegistry, Broker: rabbit})
+	scraper := scrapers.Scraper(&scrapers.TelegramScraper{UID: ctx.Param("botid"), Offset: ctx.Param("updtid"), Registry: BotsRegistry, Broker: rabbit})
 	resp, err := scraper.Scrape(REQTIMEOUT)
 	if err != nil {
 		log.WithFields(log.Fields{

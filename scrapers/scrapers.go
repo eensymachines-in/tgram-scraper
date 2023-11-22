@@ -1,4 +1,4 @@
-package models
+package scrapers
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/eensymachines/tgramscraper/brokers"
+	"github.com/eensymachines/tgramscraper/models"
+	"github.com/eensymachines/tgramscraper/tokens"
 )
 
 // TelegramScraper : agent to call the telegram server to get updates with/without offset
@@ -18,7 +20,7 @@ import (
 type TelegramScraper struct {
 	UID      string
 	Offset   string
-	Registry TokenRegistry
+	Registry tokens.TokenRegistry
 	Broker   brokers.Broker
 	// Writer   ResponseWriter
 }
@@ -62,7 +64,7 @@ func (ts *TelegramScraper) Scrape(reqTimeOut time.Duration) (map[string]interfac
 			// TODO: fix ahead from here
 			return nil, fmt.Errorf("error reading the response body: %s", err)
 		}
-		updtResp := UpdateResponse{}
+		updtResp := models.UpdateResponse{}
 		err = json.Unmarshal(byt, &updtResp)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal update response from server %s", err)

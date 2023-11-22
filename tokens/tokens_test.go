@@ -1,12 +1,35 @@
-package main
+package tokens_test
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/eensymachines/tgramscraper/models"
+	"github.com/eensymachines/tgramscraper/tokens"
 	"github.com/stretchr/testify/assert"
 )
 
+func ExampleNewSimpleTokenRegistry() {
+	reg := tokens.NewSimpleTokenRegistry("6425245255:EGyHrU-i9MjCL5ZiTBl9k33UBH-o51-G5g4")
+	fmt.Println(reg)
+	// Output:
+	// &{map[6425245255:6425245255:EGyHrU-i9MjCL5ZiTBl9k33UBH-o51-G5g4]}
+}
+func ExampleNewSimpleTokenRegistry_badToken() {
+	// Observe that token has id that is alphanumeric while its expected to have only numberic
+	reg := tokens.NewSimpleTokenRegistry("64252452fff:EGyHrU-i9MjCL5ZiTBl9k33UBH-o51-G5g4")
+	fmt.Println(reg)
+	// Another case when the token is empty
+	reg = tokens.NewSimpleTokenRegistry("")
+	fmt.Println(reg)
+	// Another case when the token does not conform to the pattern
+	// Notice how the ":" is missing
+	reg = tokens.NewSimpleTokenRegistry("64252452fffEGyHrU-i9MjCL5ZiTBl9k33UBH-o51-G5g4")
+	fmt.Println(reg)
+	// Output:
+	// &{map[]}
+	// &{map[]}
+	// &{map[]}
+}
 func TestCreateRegistry(t *testing.T) {
 	// TEST: creating a new registry
 	cases := []string{
@@ -24,7 +47,7 @@ func TestCreateRegistry(t *testing.T) {
 		"3226251931:dyaDVx-XRpZXbKQnTR7HRJwA7B-g7b-eMiB", // duplicate registry: will not be in the registry
 	}
 
-	registry := models.NewSimpleTokenRegistry(cases...)
+	registry := tokens.NewSimpleTokenRegistry(cases...)
 	assert.NotEqual(t, 0, registry.Count(), "Count of registered cannot be zero")
 	t.Logf("number of registered bots %d", registry.Count())
 
@@ -52,7 +75,7 @@ func TestCreateRegistry(t *testing.T) {
 		"-1/2",
 		"NULL",
 	}
-	registry = models.NewSimpleTokenRegistry(notOkToks...)
+	registry = tokens.NewSimpleTokenRegistry(notOkToks...)
 	assert.Equal(t, 0, registry.Count(), "Unexpected non zero count of registeries")
 
 }

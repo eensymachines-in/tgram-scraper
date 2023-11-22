@@ -1,4 +1,4 @@
-package main
+package scrapers
 
 import (
 	"testing"
@@ -17,7 +17,7 @@ func TestBasicAmqp(t *testing.T) {
 	t.Log("Connected to the amqp server")
 	// creating a channel - an exchange?
 	ch, err := conn.Channel()
-	
+
 	assert.Nil(t, err, "Unexpected error when starting a channel")
 	assert.NotNil(t, ch, "Channel on the connection is nil, unexpected")
 

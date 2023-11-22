@@ -6,45 +6,49 @@ import (
 	"github.com/streadway/amqp"
 )
 
-type RabbitMQBroker struct {
-	Conn  *amqp.Connection
-	QName string
+// Payload sent back by RabbitConnDial that holds pointers to functions for operating on the broker further.
+// Is the context object that can provide for further functions to call in the context of the given connection.
+type RabbitConnResult struct {
+	Publish func(message []byte, excName, topic string) error // publishing messages to exchanges
+	// A queue per listener.
+	// A single listener can have 2 queues bound to the same exchange, but most probably with distinct topics
+	// trying to call this function with identical names for the same exchange and topic will do nothing
+	// 2 or more listeners cannot have a single queue, fan in isnt allowed.
+	BindAQueue func(name, excName, topic string) error // binds a queue with a name to an exchange under a specific topic
+	CloseConn  func()                                  // closes the connection
 }
 
-func (rbmq *RabbitMQBroker) Publish(byt []byte) error {
-	if rbmq.Conn == nil {
-		return fmt.Errorf("nil broker connection, cannot publish")
-	}
-	if byt == nil {
-		return fmt.Errorf("nil/invalid message to publish, cannot continue")
-	}
-	// Starting a new channel
-	ch, err := rbmq.Conn.Channel()
-	if err != nil || ch == nil {
-		return fmt.Errorf("error creating a new channel to Rabbit, %s", err)
-	}
-	defer ch.Close()
-
-	// Publishing the message on the channel,. default exchange
-	err = ch.Publish("", rbmq.QName, false, false, amqp.Publishing{
-		ContentType: "text/plain",
-		Body:        byt,
-	})
+// RabbitConnDial is a closure around amqp.Connection, that lets you do publishing and listening on a exchange and queue
+// Sends back a connection result which is set of pointers to functions to operate on further.
+func RabbitConnDial(user, passwd, server string) (*RabbitConnResult, error) {
+	conn, err := amqp.Dial(fmt.Sprintf("amqp://%s:%s@%s/", user, passwd, server))
 	if err != nil {
-		return fmt.Errorf("failed publishing message on rabbit channel, %s", err)
+		return nil, nil
 	}
-	return nil
-}
-
-func (rbmq *RabbitMQBroker) DeclareQueue(name string) error {
-	ch, err := rbmq.Conn.Channel()
-	if err != nil || ch == nil {
-		return fmt.Errorf("error creating a new channel to Rabbit, %s", err)
+	ch, err := conn.Channel()
+	if ch == nil || err != nil {
+		return nil, fmt.Errorf("failed RabbitConnDial: %s", err)
 	}
-	defer ch.Close()
-	_, err = ch.QueueDeclare(name, true, false, false, false, nil)
-	if err != nil {
-		return fmt.Errorf("error declaring new queue: %s", err)
-	}
-	return nil
+	return &RabbitConnResult{
+		Publish: func(message []byte, excName, topic string) error {
+			return ch.Publish(excName, topic, false, false, amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        message,
+			})
+		},
+		BindAQueue: func(name, excName, topic string) error {
+			// Binding 2 queues with the same name to the same exchange subscribing to the same topic will do nothing.
+			// Will NOT create a new queue.
+			// When only the name differs 2 queues can have bound to the same excahnge under the samep topic.
+			_, err := ch.QueueDeclare(name, false, false, false, false, nil)
+			if err != nil {
+				return err
+			}
+			return ch.QueueBind(name, topic, excName, false, nil)
+		},
+		CloseConn: func() {
+			ch.Close()
+			conn.Close()
+		},
+	}, nil
 }
