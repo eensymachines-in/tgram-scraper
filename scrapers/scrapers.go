@@ -1,3 +1,6 @@
+// Are services that can query telegram server when triggered
+
+// Scrapers are implementations of services that can fetch updates from chat servers
 package scrapers
 
 import (
@@ -9,10 +12,18 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/eensymachines/tgramscraper/brokers"
 	"github.com/eensymachines/tgramscraper/models"
 	"github.com/eensymachines/tgramscraper/tokens"
 )
+
+// ScrapeConfig extensible configuration object when scraping
+type ScrapeConfig struct {
+	RequestTimeout time.Duration // scrape requests refer to http requests made, timeout refers to the same
+}
+
+type Scraper interface {
+	Scrape(c ScrapeConfig) (*ScrapeResult, error)
+}
 
 // TelegramScraper : agent to call the telegram server to get updates with/without offset
 // From the registry can get the details of the bot - token, tokens are necessary when getting the updates
@@ -21,12 +32,18 @@ type TelegramScraper struct {
 	UID      string
 	Offset   string
 	Registry tokens.TokenRegistry
-	Broker   brokers.Broker
-	// Writer   ResponseWriter
+}
+
+// ScrapeResult is the return result after Scrape is called.
+type ScrapeResult struct {
+	UpdateCount      int      // count of distinct updatess
+	NextUpdateOffset string   // for the subsequent request this is used as the offset for getting the updates, large number
+	AllMessages      []string // text messages in each of the updates
+	ForBot           string   // id of the bot for which this result is relevant, each bot has an id
 }
 
 // Scrape : getupdates > send the message over to the broker >return reponse result (sumamry of the update)
-func (ts *TelegramScraper) Scrape(reqTimeOut time.Duration) (map[string]interface{}, error) {
+func (ts *TelegramScraper) Scrape(c ScrapeConfig) (*ScrapeResult, error) {
 	// TODO: finding from the registry shouldnt be the responsibility of the scrapper
 	// Need tomove the same from here
 	botTok, ok := ts.Registry.Find(ts.UID)
@@ -48,7 +65,7 @@ func (ts *TelegramScraper) Scrape(reqTimeOut time.Duration) (map[string]interfac
 		}(botTok)
 		req, _ := http.NewRequest("GET", url, bytes.NewBuffer([]byte("")))
 		client := &http.Client{
-			Timeout: reqTimeOut,
+			Timeout: c.RequestTimeout,
 		}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -70,22 +87,9 @@ func (ts *TelegramScraper) Scrape(reqTimeOut time.Duration) (map[string]interfac
 			return nil, fmt.Errorf("failed to unmarshal update response from server %s", err)
 		}
 		updtResp.BotID = ts.UID // bot id is nowhere to be found in the update - hence attaching the same
-		byt, err = json.Marshal(updtResp)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response from Telegram server %s", err)
-		}
-		if len(updtResp.Result) > 0 {
-			// NOTE: publishing on the broker only if there are message results in the update
-			if err := ts.Broker.Publish(byt); err != nil {
-				return nil, err
-			}
-		}
-		return map[string]interface{}{
-			"totalUpdates": len(updtResp.Result),
-			"updateOffset": func() string {
-				// gets the offset required for the next update
-				// offsets since they are large numbers,storethem as string
-				// for getting next offset, temp conversion  to big int and then back to string for result
+		return &ScrapeResult{
+			UpdateCount: len(updtResp.Result),
+			NextUpdateOffset: func() string {
 				n := new(big.Int)
 				if len(updtResp.Result) > 0 {
 					val, _ := n.SetString(updtResp.Result[len(updtResp.Result)-1].UpdtID.String(), 10)
@@ -94,7 +98,8 @@ func (ts *TelegramScraper) Scrape(reqTimeOut time.Duration) (map[string]interfac
 				}
 				return n.String()
 			}(),
-			"allMessages": func() []string { // collects texts of all the messages
+			ForBot: ts.UID,
+			AllMessages: func() []string { // collects texts of all the messages
 				res := []string{}
 				for _, r := range updtResp.Result {
 					res = append(res, r.Message.Text)
@@ -104,8 +109,4 @@ func (ts *TelegramScraper) Scrape(reqTimeOut time.Duration) (map[string]interfac
 		}, nil
 	}
 	return nil, fmt.Errorf("no bot with id %s found registered with us. Only registerd bots can scrape", botTok)
-}
-
-type Scraper interface {
-	Scrape(time.Duration) (map[string]interface{}, error)
 }

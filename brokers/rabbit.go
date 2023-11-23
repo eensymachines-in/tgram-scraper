@@ -3,6 +3,7 @@ package brokers
 import (
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
@@ -25,10 +26,16 @@ func RabbitConnDial(user, passwd, server string) (*RabbitConnResult, error) {
 	if err != nil {
 		return nil, nil
 	}
+	log.WithFields(log.Fields{
+		"connection_isnotnil": conn != nil,
+	}).Debug("connected to rabbitmq broker")
 	ch, err := conn.Channel()
 	if ch == nil || err != nil {
 		return nil, fmt.Errorf("failed RabbitConnDial: %s", err)
 	}
+	log.WithFields(log.Fields{
+		"channel_isnotnil": conn != nil,
+	}).Debug("established channel to rabbitmq broker")
 	return &RabbitConnResult{
 		Publish: func(message []byte, excName, topic string) error {
 			return ch.Publish(excName, topic, false, false, amqp.Publishing{

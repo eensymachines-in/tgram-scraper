@@ -45,8 +45,11 @@ const (
 
 	REQTIMEOUT   = 6 * time.Second
 	RABBIT_QUEUE = "tgramscrape_messages"
-	// constants below are incase when the environment variables arent loaded
-	// IMP: do not use them production
+)
+
+var (
+	// Below are the values that are used for local testing
+	// IMP: not to use in production
 	AMQP_USER   = "guest"
 	AMQP_PASSWD = "guest"
 	AMQP_SERVER = "localhost:30073" // server address inclusive of te port
@@ -66,35 +69,29 @@ func init() {
 	log.SetLevel(log.DebugLevel) // default level info debug but FVerbose will set it main
 	logFile = os.Getenv("LOGF")
 
-	// ------------- Reading in the environment
-	// ------- forming the connection string
 	user := os.Getenv("AMQP_USER")
-	if user == "" {
-		user = AMQP_USER
+	if user != "" {
+		AMQP_USER = user
 	}
 	passwd := os.Getenv("AMQP_PASSWD")
-	if passwd == "" {
-		passwd = AMQP_PASSWD
+	if passwd != "" {
+		AMQP_PASSWD = passwd
 	}
 	server := os.Getenv("AMQP_SERVER")
-	if server == "" {
-		server = AMQP_SERVER
+	if server != "" {
+		AMQP_SERVER = server
 	}
-
+	log.WithFields(log.Fields{
+		"user":   user,
+		"server": server,
+	}).Debug("Read in environment variables")
 	// Making rabbit mq connection
 	// declaring a queue that all the subscribers listen to
 	//svc-rabbit:5672
 	//localhost:30072
-	conn, err := amqp.Dial(fmt.Sprintf("amqp://%s:%s@%s/", user, passwd, server))
-	if err != nil || conn == nil {
-		log.WithFields(log.Fields{
-			"err": err,
-		}).Error("failed to make amqp connection to rabbit mq")
-		panic(err)
-	}
-	log.Info("Established connection to rabbitmq broker")
 
-	RabbitConn = conn
+	// TODO: initialize rabbit connections
+
 	// TODO:
 	// this registry can be hydrated from environment / secret files
 	// for all the development purposes we have left it hardcoded for now
@@ -102,6 +99,57 @@ func init() {
 	log.WithFields(log.Fields{
 		"count": BotsRegistry.Count(),
 	}).Debug("botsregistry read in")
+}
+
+// HndlRabbitPublish : message received in context from the previous handlers is published to the rabbit broker
+func HndlRabbitPublish(ctx *gin.Context) {
+	conn, err := brokers.RabbitConnDial(AMQP_USER, AMQP_PASSWD, AMQP_SERVER)
+	if err != nil || conn == nil {
+		log.WithFields(log.Fields{
+			"user":   AMQP_USER,
+			"server": AMQP_SERVER,
+			"err":    err,
+		}).Error("failed HndlRabbitPublish: unsuccessful rabbit dial connection")
+		ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
+			"err": "One ",
+		})
+		return
+	}
+
+	defer conn.CloseConn()
+	val, ok := ctx.Get("scrape_result")
+	if !ok {
+		log.WithFields(log.Fields{
+			"scrape_result": val,
+		}).Error("failed HndlRabbitPublish: invalid or empty scrape result")
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"err": "One ",
+		})
+		return
+	}
+	botUpdate, ok := val.(*scrapers.ScrapeResult)
+	if !ok || botUpdate == nil {
+		log.Error("failed HndlRabbitPublish: Invalid type of scrape result, expected *scrapers.ScrapeResult")
+		ctx.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	publishTopic := fmt.Sprintf("%s.updates", botUpdate.ForBot)
+	for _, updt := range botUpdate.AllMessages {
+		// NOTE: the broker gets each message published independently, not as an slice
+		// incase there arent any results, no publications
+		conn.BindAQueue("test.listener", "amq.topic", publishTopic)
+		err = conn.Publish([]byte(updt), "amq.topic", publishTopic)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"err": err,
+			}).Error("failed HndlRabbitPublish: failed to publish to rabbit broker")
+			ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
+				"err": "Received updates, but failed to publish",
+			})
+			return
+		}
+	}
+	ctx.AbortWithStatusJSON(http.StatusOK, botUpdate)
 }
 
 func HndlScrapeTrigger(ctx *gin.Context) {
@@ -130,20 +178,11 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 	}
 	// Preparing the broker to be consumed by the scraper
 	// making a new rabbit mq broker
-	rabbit := brokers.Broker(&brokers.RabbitMQBroker{Conn: RabbitConn, QName: RABBIT_QUEUE})
-	err := rabbit.(brokers.QueuedBroker).DeclareQueue(RABBIT_QUEUE)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"err-msg": err,
-		}).Error("failed to initiate a queue on the broker")
-		ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-			"err": "Received message from Telegram server, but could not broker",
-		})
-		return
-	}
+	// TODO: access rabbit broker and post the mesasge
+
 	// Response writer
-	scraper := scrapers.Scraper(&scrapers.TelegramScraper{UID: ctx.Param("botid"), Offset: ctx.Param("updtid"), Registry: BotsRegistry, Broker: rabbit})
-	resp, err := scraper.Scrape(REQTIMEOUT)
+	scraper := scrapers.Scraper(&scrapers.TelegramScraper{UID: ctx.Param("botid"), Offset: ctx.Param("updtid"), Registry: BotsRegistry})
+	resp, err := scraper.Scrape(scrapers.ScrapeConfig{RequestTimeout: 6 * time.Second})
 	if err != nil {
 		log.WithFields(log.Fields{
 			"botid":          ctx.Param("botid"),
@@ -151,12 +190,9 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			"count_reg_bots": BotsRegistry.Count(),
 			"broker_nil":     fmt.Sprintf("%t", BotsRegistry.Count() > 0),
 		}).Errorf("failed to scrape/TelegramScraper: %s", err)
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"err": fmt.Sprintf("bot ID unregistered or is invalid: %s", ctx.Param("botid")),
-		})
-		return
 	}
-	ctx.AbortWithStatusJSON(http.StatusOK, resp)
+	ctx.Set("scrape_result", resp) // downstreaming processing of the scrape
+	ctx.Next()
 }
 
 func main() {
@@ -192,7 +228,7 @@ func main() {
 			"msg":    "If you are able to see this, you know the telegram scraper is working fine",
 		})
 	})
-	r.POST("/bots/:botid/scrape/:updtid", HndlScrapeTrigger)
+	r.POST("/bots/:botid/scrape/:updtid", HndlScrapeTrigger, HndlRabbitPublish)
 
 	log.Fatal(r.Run(":8080"))
 }

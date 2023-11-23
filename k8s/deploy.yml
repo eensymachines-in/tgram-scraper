@@ -21,7 +21,24 @@ spec:
     spec:
       containers:
         - name: ctn-tgramscrape
-          image: kneerunjun/tgramscraper:1.1
+          image: kneerunjun/tgramscraper:1.4
           imagePullPolicy: IfNotPresent
           ports:
-          - containerPort: 8080
+            - containerPort: 8080
+          env:
+            - name: AMQP_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: rabbit-config
+                  key: amqp_user
+            - name: AMQP_PASSWD
+              valueFrom:
+                configMapKeyRef:
+                  name: rabbit-config
+                  key: amqp_passwd
+            - name: AMQP_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: rabbit-config
+                  key: amqp_server
+          
