@@ -15,7 +15,8 @@ import (
 
 var (
 	// tokenRegx is the pattern of the string for which the telegram bot token is valid
-	tokenRegx = regexp.MustCompile(`^[0-9]{10}:[\w\W\d]{6}-[\w\W\d]{19}-[\w\W\d]{3}-[\w\W\d]{4}$`)
+	// tokenRegx = regexp.MustCompile(`^[0-9]{10}:[\w\W\d]{6}-[\w\W\d]{19}-[\w\W\d]{3}-[\w\W\d]{4}$`)
+	tokenRegx = regexp.MustCompile(`^[0-9]{10}:[\w\W\d_-]{35}$`)
 )
 
 // Generic public interface for accessing any type of token registry.

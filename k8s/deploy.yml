@@ -21,8 +21,12 @@ spec:
     spec:
       containers:
         - name: ctn-tgramscrape
-          image: kneerunjun/tgramscraper:1.4
-          imagePullPolicy: IfNotPresent
+          image: kneerunjun/tgramscraper:1.5.2
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: vol-tgramsecrets
+              mountPath: /run/secrets/vol-tgramsecrets
+              readOnly: true
           ports:
             - containerPort: 8080
           env:
@@ -41,4 +45,18 @@ spec:
                 configMapKeyRef:
                   name: rabbit-config
                   key: amqp_server
+            - name: BASEURL
+              valueFrom:
+                configMapKeyRef:
+                  name: telegram-config
+                  key: base_url
+            - name: NIRCHATID
+              valueFrom:
+                configMapKeyRef:
+                  name: telegram-config
+                  key: nir_chatid
+      volumes:
+        - name: vol-tgramsecrets
+          secret: 
+            secretName: tgram-secret
           

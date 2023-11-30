@@ -11,8 +11,11 @@ import (
 func ExampleNewSimpleTokenRegistry() {
 	reg := tokens.NewSimpleTokenRegistry("6425245255:EGyHrU-i9MjCL5ZiTBl9k33UBH-o51-G5g4")
 	fmt.Println(reg)
+	reg = tokens.NewSimpleTokenRegistry("5234189659:AAFhRYn_Rmg4EvAtC6nkraPZjgttiBLWFdg")
+	fmt.Println(reg)
 	// Output:
 	// &{map[6425245255:6425245255:EGyHrU-i9MjCL5ZiTBl9k33UBH-o51-G5g4]}
+	// &{map[5234189659:5234189659:AAFhRYn_Rmg4EvAtC6nkraPZjgttiBLWFdg]}
 }
 func ExampleNewSimpleTokenRegistry_badToken() {
 	// Observe that token has id that is alphanumeric while its expected to have only numberic

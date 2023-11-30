@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/eensymachines/tgramscraper/brokers"
@@ -37,12 +38,11 @@ var (
 // token for the bot cannot be exposed
 const (
 	// Details on botmincock.. since that bot isnt functional for now
-	BASEURL = "https://api.telegram.org/bot"
+
 	// following 2 should be received from secrets
 	BOTTOK    = "6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk"
 	BOTCHATID = "6133190482"
-	NIRCHATID = "5157350442" // this id is the chat id of the developer
-
+	// this id is the chat id of the developer
 	REQTIMEOUT   = 6 * time.Second
 	RABBIT_QUEUE = "tgramscrape_messages"
 )
@@ -53,7 +53,23 @@ var (
 	AMQP_USER   = "guest"
 	AMQP_PASSWD = "guest"
 	AMQP_SERVER = "localhost:30073" // server address inclusive of te port
+
+	BASEURL      = "https://api.telegram.org/bot"
+	NIRCHATID    = "5157350442"
+	SECRET_MOUNT = "/run/secrets/vol-tgramsecrets/" // this is where the secrets are mounted
+	TGRAM_SECRET = "bottoks"                        // when configured on kubernetes this is the name of the secret you want to access
 )
+
+// loadBotTokenSecrets : from the mounted secrets this can split get all the distinct tokens
+func loadBotTokenSecrets() ([]string, error) {
+	filepath := fmt.Sprintf("%s%s", SECRET_MOUNT, TGRAM_SECRET)
+	byt, err := os.ReadFile(filepath)
+	if err != nil || byt == nil {
+		// Unable to read file - secrets not loaded
+		return []string{}, fmt.Errorf("error reading the bottokens from secrets %s", err)
+	}
+	return strings.Split(string(byt), " "), nil
+}
 
 func init() {
 	// Setting up log configuration for the api
@@ -81,21 +97,17 @@ func init() {
 	if server != "" {
 		AMQP_SERVER = server
 	}
+
 	log.WithFields(log.Fields{
 		"user":   user,
 		"server": server,
 	}).Debug("Read in environment variables")
-	// Making rabbit mq connection
-	// declaring a queue that all the subscribers listen to
-	//svc-rabbit:5672
-	//localhost:30072
 
-	// TODO: initialize rabbit connections
-
-	// TODO:
-	// this registry can be hydrated from environment / secret files
-	// for all the development purposes we have left it hardcoded for now
-	BotsRegistry = tokens.NewSimpleTokenRegistry("6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk")
+	toks, err := loadBotTokenSecrets()
+	if err != nil {
+		log.Panic(err)
+	}
+	BotsRegistry = tokens.NewSimpleTokenRegistry(toks...)
 	log.WithFields(log.Fields{
 		"count": BotsRegistry.Count(),
 	}).Debug("botsregistry read in")
