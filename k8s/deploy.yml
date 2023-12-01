@@ -27,19 +27,12 @@ spec:
             - name: vol-tgramsecrets
               mountPath: /run/secrets/vol-tgramsecrets
               readOnly: true
+            - name: vol-amqpsecrets
+              mountPath: /run/secrets/vol-amqpsecrets
+              readOnly: true
           ports:
             - containerPort: 8080
           env:
-            - name: AMQP_USER
-              valueFrom:
-                configMapKeyRef:
-                  name: rabbit-config
-                  key: amqp_user
-            - name: AMQP_PASSWD
-              valueFrom:
-                configMapKeyRef:
-                  name: rabbit-config
-                  key: amqp_passwd
             - name: AMQP_SERVER
               valueFrom:
                 configMapKeyRef:
@@ -59,4 +52,7 @@ spec:
         - name: vol-tgramsecrets
           secret: 
             secretName: tgram-secret
+        - name: vol-amqpsecrets
+          secret:
+            secretName: amqp-secret
           

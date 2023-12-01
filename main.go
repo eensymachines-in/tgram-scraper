@@ -34,30 +34,22 @@ var (
 	BotsRegistry           tokens.TokenRegistry
 )
 
-// details of the bot are from secret configurations
-// token for the bot cannot be exposed
-const (
-	// Details on botmincock.. since that bot isnt functional for now
-
-	// following 2 should be received from secrets
-	BOTTOK    = "6133190482:AAFdMU-49W7t9zDoD5BIkOFmtc-PR7-nBLk"
-	BOTCHATID = "6133190482"
-	// this id is the chat id of the developer
-	REQTIMEOUT   = 6 * time.Second
-	RABBIT_QUEUE = "tgramscrape_messages"
-)
-
 var (
 	// Below are the values that are used for local testing
 	// IMP: not to use in production
-	AMQP_USER   = "guest"
-	AMQP_PASSWD = "guest"
+	// TODO: directly read from environment / secrets
+	AMQP_USER   = ""
+	AMQP_PASSWD = ""
 	AMQP_SERVER = "localhost:30073" // server address inclusive of te port
+	// TODO: below 2 variables are from environments not to be exposed here
+	BASEURL   = "https://api.telegram.org/bot"
+	NIRCHATID = "5157350442"
 
-	BASEURL      = "https://api.telegram.org/bot"
-	NIRCHATID    = "5157350442"
 	SECRET_MOUNT = "/run/secrets/vol-tgramsecrets/" // this is where the secrets are mounted
 	TGRAM_SECRET = "bottoks"                        // when configured on kubernetes this is the name of the secret you want to access
+
+	AMQP_SECRET_MOUNT = "/run/secrets/vol-amqpsecrets/"
+	AMQP_SECRET       = "user password"
 )
 
 // loadBotTokenSecrets : from the mounted secrets this can split get all the distinct tokens
@@ -70,9 +62,29 @@ func loadBotTokenSecrets() ([]string, error) {
 	}
 	return strings.Split(string(byt), " "), nil
 }
-
+func loadAMQPCredentials() (string, string, error) {
+	var user, pass string
+	secrets := strings.Split(AMQP_SECRET, " ")
+	for _, s := range secrets {
+		filepath := fmt.Sprintf("%s%s", AMQP_SECRET_MOUNT, s)
+		byt, err := os.ReadFile(filepath)
+		if err != nil || byt == nil {
+			// Unable to read file - secrets not loaded
+			return "", "", fmt.Errorf("error reading the amqp secrets %s", err)
+		}
+		if s == "user" {
+			user = string(byt)
+		}
+		if s == "password" {
+			pass = string(byt)
+		}
+	}
+	return user, pass, nil
+}
 func init() {
-	// Setting up log configuration for the api
+	/* -------------
+	Setting up log configuration for the api
+	----------------*/
 	log.SetFormatter(&log.TextFormatter{
 		DisableColors: false,
 		FullTimestamp: false,
@@ -85,24 +97,35 @@ func init() {
 	log.SetLevel(log.DebugLevel) // default level info debug but FVerbose will set it main
 	logFile = os.Getenv("LOGF")
 
-	user := os.Getenv("AMQP_USER")
-	if user != "" {
-		AMQP_USER = user
-	}
-	passwd := os.Getenv("AMQP_PASSWD")
-	if passwd != "" {
-		AMQP_PASSWD = passwd
-	}
+	/* -------------
+	Environment variables || default values
+	----------------*/
+
 	server := os.Getenv("AMQP_SERVER")
 	if server != "" {
 		AMQP_SERVER = server
 	}
-
+	var err error
+	AMQP_USER, AMQP_PASSWD, err = loadAMQPCredentials()
+	if err != nil {
+		log.Panic(err)
+	}
 	log.WithFields(log.Fields{
-		"user":   user,
-		"server": server,
-	}).Debug("Read in environment variables")
+		"user":     AMQP_USER,
+		"password": AMQP_PASSWD,
+	}).Debug("AMQP credentials read in..")
 
+	nirchatid := os.Getenv("NIRCHATID")
+	if nirchatid != "" {
+		NIRCHATID = nirchatid
+	}
+	baseurl := os.Getenv("BASEURL")
+	if baseurl != "" {
+		BASEURL = baseurl
+	}
+	/* -------------
+	Loading telegram bot secrets
+	------------- */
 	toks, err := loadBotTokenSecrets()
 	if err != nil {
 		log.Panic(err)
