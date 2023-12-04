@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: rabbit-config
-data:
-  # property-like keys; each key maps to a simple value
-  amqp_user: "guest"
-  amqp_passwd: "guest"
-  amqp_server: "svc-rabbit:81"

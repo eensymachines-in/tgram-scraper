@@ -14,6 +14,7 @@ import (
 
 	"github.com/eensymachines/tgramscraper/models"
 	"github.com/eensymachines/tgramscraper/tokens"
+	log "github.com/sirupsen/logrus"
 )
 
 // ScrapeConfig extensible configuration object when scraping
@@ -69,21 +70,32 @@ func (ts *TelegramScraper) Scrape(c ScrapeConfig) (*ScrapeResult, error) {
 		}
 		resp, err := client.Do(req)
 		if err != nil {
+			log.WithFields(log.Fields{
+				"err": err,
+			}).Debug("Scrape: error making the http request, check internet connection")
 			return nil, fmt.Errorf("failed to send http reuest to Telegram server %s", err)
 		}
 		if resp.StatusCode != http.StatusOK {
+			log.WithFields(log.Fields{
+				"status_code": resp.StatusCode,
+			}).Debug("Scrape: Http status code from the telegram server is unfavorable")
 			return nil, fmt.Errorf("error response from telegram server %d", resp.StatusCode)
 		}
 
 		// statusok , reading the response body
 		byt, err := io.ReadAll(resp.Body)
 		if err != nil {
-			// TODO: fix ahead from here
+			log.WithFields(log.Fields{
+				"err": err,
+			}).Debug("Scrape: Error reading response payload from telegram server")
 			return nil, fmt.Errorf("error reading the response body: %s", err)
 		}
 		updtResp := models.UpdateResponse{}
 		err = json.Unmarshal(byt, &updtResp)
 		if err != nil {
+			log.WithFields(log.Fields{
+				"err": err,
+			}).Debug("Scrape: Error unmarshaling response payload from telegram server")
 			return nil, fmt.Errorf("failed to unmarshal update response from server %s", err)
 		}
 		updtResp.BotID = ts.UID // bot id is nowhere to be found in the update - hence attaching the same

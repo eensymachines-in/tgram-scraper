@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -35,15 +36,8 @@ var (
 )
 
 var (
-	// Below are the values that are used for local testing
-	// IMP: not to use in production
-	// TODO: directly read from environment / secrets
-	AMQP_USER   = ""
-	AMQP_PASSWD = ""
-	AMQP_SERVER = "localhost:30073" // server address inclusive of te port
-	// TODO: below 2 variables are from environments not to be exposed here
-	BASEURL   = "https://api.telegram.org/bot"
-	NIRCHATID = "5157350442"
+	AMQP_USER, AMQP_PASSWD, AMQP_SERVER string
+	BASEURL, NIRCHATID                  string
 
 	SECRET_MOUNT = "/run/secrets/vol-tgramsecrets/" // this is where the secrets are mounted
 	TGRAM_SECRET = "bottoks"                        // when configured on kubernetes this is the name of the secret you want to access
@@ -100,29 +94,32 @@ func init() {
 	/* -------------
 	Environment variables || default values
 	----------------*/
-
-	server := os.Getenv("AMQP_SERVER")
-	if server != "" {
-		AMQP_SERVER = server
+	AMQP_SERVER = os.Getenv("AMQP_SERVER")
+	NIRCHATID = os.Getenv("NIRCHATID")
+	BASEURL = os.Getenv("BASEURL")
+	if AMQP_SERVER == "" || NIRCHATID == "" || BASEURL == "" {
+		log.WithFields(log.Fields{
+			"server":    AMQP_SERVER,
+			"nirchatid": NIRCHATID,
+			"baseurl":   BASEURL,
+		}).Panic("failed to load one or more environment veairbles")
 	}
+	log.Debug("Environment vars loadeed..")
+
 	var err error
 	AMQP_USER, AMQP_PASSWD, err = loadAMQPCredentials()
 	if err != nil {
-		log.Panic(err)
+		log.WithFields(log.Fields{
+			"user":     AMQP_USER,
+			"password": AMQP_PASSWD,
+			"err":      err,
+		}).Panic("failed to read secret amqo credentials")
 	}
 	log.WithFields(log.Fields{
 		"user":     AMQP_USER,
 		"password": AMQP_PASSWD,
 	}).Debug("AMQP credentials read in..")
 
-	nirchatid := os.Getenv("NIRCHATID")
-	if nirchatid != "" {
-		NIRCHATID = nirchatid
-	}
-	baseurl := os.Getenv("BASEURL")
-	if baseurl != "" {
-		BASEURL = baseurl
-	}
 	/* -------------
 	Loading telegram bot secrets
 	------------- */
@@ -150,7 +147,7 @@ func HndlRabbitPublish(ctx *gin.Context) {
 		})
 		return
 	}
-
+	log.Debug("rabbit connected..")
 	defer conn.CloseConn()
 	val, ok := ctx.Get("scrape_result")
 	if !ok {
@@ -164,15 +161,17 @@ func HndlRabbitPublish(ctx *gin.Context) {
 	}
 	botUpdate, ok := val.(*scrapers.ScrapeResult)
 	if !ok || botUpdate == nil {
-		log.Error("failed HndlRabbitPublish: Invalid type of scrape result, expected *scrapers.ScrapeResult")
+		log.WithFields(log.Fields{
+			"update_type": reflect.TypeOf(botUpdate).String(),
+		}).Error("failed HndlRabbitPublish: Invalid type of scrape result, expected *scrapers.ScrapeResult")
 		ctx.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	publishTopic := fmt.Sprintf("%s.updates", botUpdate.ForBot)
+	publishTopic := fmt.Sprintf("%s.updates", botUpdate.ForBot) // fixing the topic under which the message is published.
 	for _, updt := range botUpdate.AllMessages {
 		// NOTE: the broker gets each message published independently, not as an slice
 		// incase there arent any results, no publications
-		conn.BindAQueue("test.listener", "amq.topic", publishTopic)
+		conn.BindAQueue("test.listener", "amq.topic", publishTopic) // this is only for testing purposes
 		err = conn.Publish([]byte(updt), "amq.topic", publishTopic)
 		if err != nil {
 			log.WithFields(log.Fields{

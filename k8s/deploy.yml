@@ -36,18 +36,18 @@ spec:
             - name: AMQP_SERVER
               valueFrom:
                 configMapKeyRef:
-                  name: rabbit-config
+                  name: gateway-config
                   key: amqp_server
             - name: BASEURL
               valueFrom:
                 configMapKeyRef:
-                  name: telegram-config
-                  key: base_url
+                  name: gateway-config
+                  key: telegram_server
             - name: NIRCHATID
               valueFrom:
                 configMapKeyRef:
-                  name: telegram-config
-                  key: nir_chatid
+                  name: gateway-config
+                  key: telegram_nirchatid
       volumes:
         - name: vol-tgramsecrets
           secret: 

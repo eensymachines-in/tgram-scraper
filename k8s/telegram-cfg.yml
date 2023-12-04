@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: telegram-config
-data:
-  # property-like keys; each key maps to a simple value
-  base_url: "https://api.telegram.org/bot"
-  nir_chatid: "5157350442"
-  req_timeout: "6"

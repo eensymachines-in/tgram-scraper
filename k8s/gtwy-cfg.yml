@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+data:
+  # when referring to gateway connections we need base urls
+  # also when connecting to other services we need service names
+  # telegram configurations also a part of this
+  telegram_server: "https://api.telegram.org/bot"
+  amqp_server: "svc-rabbit"
+  telegram_nirchatid: "5157350442"
+  gateway_timeout: "6"
+  
