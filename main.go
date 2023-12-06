@@ -11,6 +11,7 @@ author 		:kneerunjun@gmail.com
 date		:01-NOV-2023
 ===========================*/
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"net/http"
@@ -54,6 +55,9 @@ func loadBotTokenSecrets() ([]string, error) {
 		// Unable to read file - secrets not loaded
 		return []string{}, fmt.Errorf("error reading the bottokens from secrets %s", err)
 	}
+	if bytes.HasSuffix(byt, []byte("\n")) { //often file read in will have this as a suffix
+		byt, _ = bytes.CutSuffix(byt, []byte("\n"))
+	}
 	return strings.Split(string(byt), " "), nil
 }
 func loadAMQPCredentials() (string, string, error) {
@@ -65,6 +69,9 @@ func loadAMQPCredentials() (string, string, error) {
 		if err != nil || byt == nil {
 			// Unable to read file - secrets not loaded
 			return "", "", fmt.Errorf("error reading the amqp secrets %s", err)
+		}
+		if bytes.HasSuffix(byt, []byte("\n")) { //often file read in will have this as a suffix
+			byt, _ = bytes.CutSuffix(byt, []byte("\n"))
 		}
 		if s == "user" {
 			user = string(byt)
@@ -127,10 +134,25 @@ func init() {
 	if err != nil {
 		log.Panic(err)
 	}
+	for _, t := range toks {
+		log.WithFields(log.Fields{
+			"tok": t,
+		}).Debug("token")
+	}
 	BotsRegistry = tokens.NewSimpleTokenRegistry(toks...)
 	log.WithFields(log.Fields{
 		"count": BotsRegistry.Count(),
 	}).Debug("botsregistry read in")
+
+	// Testing amqp connection , and aborting early
+	_, err = brokers.RabbitConnDial(AMQP_USER, AMQP_PASSWD, AMQP_SERVER)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"user":   AMQP_USER,
+			"server": AMQP_SERVER,
+			"err":    err,
+		}).Panic("failed to connect to AMQP server")
+	}
 }
 
 // HndlRabbitPublish : message received in context from the previous handlers is published to the rabbit broker

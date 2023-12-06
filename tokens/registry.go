@@ -31,7 +31,7 @@ type TokenRegistry interface {
 type SimpleTokenRegistry struct {
 	Data map[string]string // key value pairs for token and uid of the bots
 }
-
+// 5234189659:AAFhRYn_Rmg4EvAtC6nkraPZjgttiBLWFdg
 // NewSimpleTokenRegistry creates a SimpleTokenRegistry object over TokeneRegistry interface.
 // From the given string token, this can extract the token and uid of the bot.
 // Incase the token is invalid, it'd silently continue without adding the registration, but will log the error.
