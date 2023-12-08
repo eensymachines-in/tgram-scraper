@@ -205,6 +205,7 @@ func HndlRabbitPublish(ctx *gin.Context) {
 			return
 		}
 	}
+
 	ctx.AbortWithStatusJSON(http.StatusOK, botUpdate)
 }
 
@@ -247,6 +248,9 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 			"broker_nil":     fmt.Sprintf("%t", BotsRegistry.Count() > 0),
 		}).Errorf("failed to scrape/TelegramScraper: %s", err)
 	}
+	log.WithFields(log.Fields{
+		"count": resp.UpdateCount,
+	}).Debug("received updates from telegram server")
 	ctx.Set("scrape_result", resp) // downstreaming processing of the scrape
 	ctx.Next()
 }

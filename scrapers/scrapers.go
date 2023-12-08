@@ -37,10 +37,10 @@ type TelegramScraper struct {
 
 // ScrapeResult is the return result after Scrape is called.
 type ScrapeResult struct {
-	UpdateCount      int      // count of distinct updatess
-	NextUpdateOffset string   // for the subsequent request this is used as the offset for getting the updates, large number
-	AllMessages      []string // text messages in each of the updates
-	ForBot           string   // id of the bot for which this result is relevant, each bot has an id
+	UpdateCount      int      `json:"update_count"` // count of distinct updatess
+	NextUpdateOffset string   `json:"offset"`       // for the subsequent request this is used as the offset for getting the updates, large number
+	AllMessages      []string `json:"all_messages"` // text messages in each of the updates
+	ForBot           string   `json:"for_bot"`      // id of the bot for which this result is relevant, each bot has an id
 }
 
 // Scrape : getupdates > send the message over to the broker >return reponse result (sumamry of the update)

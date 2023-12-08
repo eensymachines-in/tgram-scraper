@@ -15,8 +15,9 @@ type RabbitConnResult struct {
 	// A single listener can have 2 queues bound to the same exchange, but most probably with distinct topics
 	// trying to call this function with identical names for the same exchange and topic will do nothing
 	// 2 or more listeners cannot have a single queue, fan in isnt allowed.
-	BindAQueue func(name, excName, topic string) error // binds a queue with a name to an exchange under a specific topic
-	CloseConn  func()                                  // closes the connection
+	BindAQueue    func(name, excName, topic string) error // binds a queue with a name to an exchange under a specific topic
+	ListenOnQueue func(name string) (<-chan amqp.Delivery, error)
+	CloseConn     func() // closes the connection
 }
 
 // RabbitConnDial is a closure around amqp.Connection, that lets you do publishing and listening on a exchange and queue
@@ -52,6 +53,9 @@ func RabbitConnDial(user, passwd, server string) (*RabbitConnResult, error) {
 				return err
 			}
 			return ch.QueueBind(name, topic, excName, false, nil)
+		},
+		ListenOnQueue: func(name string) (<-chan amqp.Delivery, error) {
+			return ch.Consume(name, "", true, false, false, false, nil)
 		},
 		CloseConn: func() {
 			ch.Close()
