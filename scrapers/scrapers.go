@@ -31,6 +31,7 @@ type Scraper interface {
 // Broker helps sending the message over to the message broker
 type TelegramScraper struct {
 	UID      string
+	BaseUrl  string // telegram server base url
 	Offset   string
 	Registry tokens.TokenRegistry
 }
@@ -57,11 +58,11 @@ func (ts *TelegramScraper) Scrape(c ScrapeConfig) (*ScrapeResult, error) {
 			n := new(big.Int)
 			val, _ := n.SetString(ts.Offset, 10)
 			if val != big.NewInt(0) {
-				return fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%s", botTok, ts.Offset)
+				return fmt.Sprintf("%s/bot%s/getUpdates?offset=%s", ts.BaseUrl, botTok, ts.Offset)
 			} else {
 				// Offset specified when 0 would lead to downloading all the updates that have been previously downloaded
 				// Not sending offset param will then get no updates if the updates have been already fetched.
-				return fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates", botTok)
+				return fmt.Sprintf("%s/bot%s/getUpdates", ts.BaseUrl, botTok)
 			}
 		}(botTok)
 		req, _ := http.NewRequest("GET", url, bytes.NewBuffer([]byte("")))

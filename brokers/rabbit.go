@@ -25,7 +25,7 @@ type RabbitConnResult struct {
 func RabbitConnDial(user, passwd, server string) (*RabbitConnResult, error) {
 	conn, err := amqp.Dial(fmt.Sprintf("amqp://%s:%s@%s/", user, passwd, server))
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 	log.WithFields(log.Fields{
 		"connection_isnotnil": conn != nil,

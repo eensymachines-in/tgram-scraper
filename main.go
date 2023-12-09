@@ -165,7 +165,7 @@ func HndlRabbitPublish(ctx *gin.Context) {
 			"err":    err,
 		}).Error("failed HndlRabbitPublish: unsuccessful rabbit dial connection")
 		ctx.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-			"err": "One ",
+			"err": "One or more gateway connections have failed",
 		})
 		return
 	}
@@ -193,7 +193,7 @@ func HndlRabbitPublish(ctx *gin.Context) {
 	for _, updt := range botUpdate.AllMessages {
 		// NOTE: the broker gets each message published independently, not as an slice
 		// incase there arent any results, no publications
-		conn.BindAQueue("test.listener", "amq.topic", publishTopic) // this is only for testing purposes
+		// conn.BindAQueue("test.listener", "amq.topic", publishTopic) // this is only for testing purposes
 		err = conn.Publish([]byte(updt), "amq.topic", publishTopic)
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -238,7 +238,7 @@ func HndlScrapeTrigger(ctx *gin.Context) {
 	// TODO: access rabbit broker and post the mesasge
 
 	// Response writer
-	scraper := scrapers.Scraper(&scrapers.TelegramScraper{UID: ctx.Param("botid"), Offset: ctx.Param("updtid"), Registry: BotsRegistry})
+	scraper := scrapers.Scraper(&scrapers.TelegramScraper{UID: ctx.Param("botid"), BaseUrl: BASEURL, Offset: ctx.Param("updtid"), Registry: BotsRegistry})
 	resp, err := scraper.Scrape(scrapers.ScrapeConfig{RequestTimeout: 6 * time.Second})
 	if err != nil {
 		log.WithFields(log.Fields{

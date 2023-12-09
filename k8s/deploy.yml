@@ -7,7 +7,7 @@ metadata:
     type: httpweb
     platform: telegram
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: scraper
@@ -21,8 +21,8 @@ spec:
     spec:
       containers:
         - name: ctn-tgramscrape
-          image: kneerunjun/tgramscraper:1.5.2
-          imagePullPolicy: Always
+          image: kneerunjun/tgramscraper:1.5.5
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: vol-tgramsecrets
               mountPath: /run/secrets/vol-tgramsecrets

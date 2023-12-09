@@ -18,8 +18,9 @@ import (
 //
 //	offset 		: this is the offset by which the total updates are filtered
 //	error incase the http request isn't a success response
-func triggerScrape(offset string) (*scrapers.ScrapeResult, error) {
-	req, err := http.NewRequest("POST", fmt.Sprintf("http://localhost:8080/bots/6133190482/scrape/%s", offset), nil)
+func triggerScrape(offset, url string) (*scrapers.ScrapeResult, error) {
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/bots/6133190482/scrape/%s", url, offset), nil)
+	// req, err := http.NewRequest("POST", fmt.Sprintf("http://localhost:30001/bots/6133190482/scrape/%s", offset), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -49,9 +50,12 @@ func triggerScrape(offset string) (*scrapers.ScrapeResult, error) {
 // NOTE: the environment variables need to be set as well as the secret files need to be enabled and populated on the host.
 // NOTE: for now the secrets are made hard coded
 func TestBlackBox(t *testing.T) {
-	// setup  ..
-	// Making a rabbit connection
-	t.Setenv("AMQP_SERVER", "localhost:32469")
+	// setup environment variables  ..
+	t.Setenv("SCRAPE_SERVER", "http://localhost:8080")
+	t.Setenv("AMQP_SERVER", "localhost:30073")
+	t.Setenv("BASEURL", "https://api.telegram.org")
+	t.Setenv("NIRCHATID", "5157350442")
+
 	connResult, err := brokers.RabbitConnDial("guest", "guest", os.Getenv("AMQP_SERVER"))
 	assert.Nil(t, err, "unexpected error when setting up the test: %s", err)
 	assert.NotNil(t, connResult, "Unexpected nil conn result")
@@ -61,6 +65,7 @@ func TestBlackBox(t *testing.T) {
 	assert.Nil(t, err, "Unexpected error when setting up the listening channel")
 	blockUntil := make(chan bool)
 	// Here after every interval we would trigger the service to scrape the telegram server for the updates
+
 	go func() {
 		offset := "0"
 		counter := 0
@@ -70,7 +75,7 @@ func TestBlackBox(t *testing.T) {
 			if counter <= 50 {
 				select {
 				case <-time.After(3 * time.Second):
-					res, err := triggerScrape(offset)
+					res, err := triggerScrape(offset, os.Getenv("SCRAPE_SERVER"))
 					if err != nil {
 						t.Error(err)
 					} else {
